@@ -202,6 +202,6 @@ git push -u origin main
 
 The included `.gitignore` excludes local captures, generated data, checkpoints, caches, and environments. The source, categorization files, figure, and license remain trackable. A GitHub Actions workflow checks source syntax and class mappings; it does not train the model.
 
-## License and acknowledgments
+## License
 
-The supplied Apache-2.0 `LICENSE` is preserved. The original project archive included a TFE-GNN README and related preprocessing utilities. We acknowledge [TFE-GNN](https://github.com/ViktorAxelsen/TFE-GNN) as an upstream reference. This README describes the ST-LLM source distributed here and does not claim to be the official TFE-GNN repository. Retain applicable upstream attribution when redistributing derived code.
+This project is distributed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
