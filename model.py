@@ -60,7 +60,7 @@ class PFA(nn.Module):
                  U:          int = 1):
         super().__init__()
         assert 0 <= n_freeze <= gpt_layers, \
-            "`n_freeze` 必须 ≤ `gpt_layers`"
+            "`n_freeze` must be between 0 and `gpt_layers`"
 
         self.U = U
         self.gpt_layers = gpt_layers
@@ -148,4 +148,4 @@ if __name__ == '__main__':
     cfg = Config()
     model = MixTemporalGNN(num_classes=cfg.NUM_CLASSES)
     total = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"可训练参数量: {total/1e6:.2f}M")
+    print(f"Trainable parameters: {total/1e6:.2f}M")
