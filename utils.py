@@ -285,7 +285,7 @@ def construct_graph(bytes, w_size, k=1):
     bytes2id = {}
     feat = []
     id_count = 0
-    for byte in src:
+    for byte in sorted(set(words)):
         if byte in bytes2id:
             continue
         bytes2id[byte] = id_count
@@ -295,8 +295,8 @@ def construct_graph(bytes, w_size, k=1):
     src = [bytes2id[i] for i in src]
     dst = [bytes2id[i] for i in dst]
 
-    g = dgl.graph((src, dst))
-    g.ndata['feat'] = torch.tensor(feat, dtype=torch.float32)
+    g = dgl.graph((src, dst), num_nodes=len(feat))
+    g.ndata['feat'] = torch.tensor(feat, dtype=torch.float32).reshape(-1, 1)
 
     return dgl.add_self_loop(g)
 

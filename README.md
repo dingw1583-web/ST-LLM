@@ -32,8 +32,9 @@ The implementation provides configurations for the following datasets and traffi
 | ISCX-Tor2016: Tor | `iscx-tor` | 8 | `data/ISCX-Tor/` |
 | ISCX-Tor2016: NonTor | `iscx-nontor` | 8 | `data/ISCX-NonTor/` |
 | USTC-TFC2016 | `ustc-tfc2016` | 20 | `data/USTC-TFC2016/` |
+| CESNET-QUIC22 custom subset | `cesnet-quic22` | 75 | `data/CESNET-QUIC22/` |
 
-Obtain the datasets separately. Class names, label mappings, and directory examples for **all five configurations** are listed in [Dataset Preparation](docs/DATASETS.md). The `DATA/` directory contains empty categorization templates; packet captures and trained checkpoints are not included.
+Obtain the datasets separately. Class names, label mappings, and directory examples for **the five original configurations** are listed in [Dataset Preparation](docs/DATASETS.md). The `DATA/` directory contains empty categorization templates; packet captures and trained checkpoints are not included.
 
 ## Pre-processing
 
@@ -74,7 +75,7 @@ python preprocess.py --dataset iscx-nontor
 python preprocess.py --dataset ustc-tfc2016
 ```
 
-The script creates training/test arrays and PMI-based byte graphs. ST-LLM consumes header arrays and payload graphs; the header graphs also produced by preprocessing are not used by the main loader.
+The script creates paired header arrays, payload PMI graphs, identities and a split manifest. LLM4ETC consumes header arrays and payload graphs; headers and payloads use identical retained packet indices.
 
 ## Training
 
@@ -104,16 +105,23 @@ python test.py --dataset ustc-tfc2016 --cuda 0
 
 For a custom checkpoint, add `--checkpoint /path/to/model.pth`. Evaluation reports per-class precision, recall, and F1.
 
-## Reproducibility
+## Reproducibility and reviewer experiments
 
-Dataset configurations and single-run defaults are defined in `config.py`. The current defaults follow the shared response-table settings: 30 packets, batch size 512, 120 epochs, Adam, learning rate `1e-2` to `1e-4`, warm-up ratio 0.1, and dropout 0.2. The training script reads these settings rather than overriding them. See [Manuscript Alignment](docs/ALIGNMENT.md) for provenance and checkpoint compatibility; these are defaults for aligned reruns, not a reconstruction of unpublished per-dataset training logs. Optional multi-seed runs are available for every supported dataset through `run_seeds.py`:
+See the [Experiment Guide](docs/EXPERIMENTS.md) for complete commands and input schemas. New data must be regenerated with paired packet selection and sample/source IDs; old untracked caches are rejected. Existing datasets retain the per-class test rule; training/validation now uses source groups targeting half the samples to prevent related-flow leakage. CESNET uses Week 1 for training, Week 2 for validation and Weeks 3–4 for separate tests.
 
 ```bash
-python run_seeds.py --dataset iscx-vpn --cuda 0 --dry-run
-python run_seeds.py --dataset iscx-vpn --cuda 0
+python build_cesnet_subset.py --input candidates.csv --classes classes.txt --output cesnet_subset.csv
+python preprocess.py --dataset cesnet-quic22 --manifest cesnet_subset.csv
+python run_seeds.py --dataset iscx-vpn --cuda 0 --variant hdf
+python run_seeds.py --dataset iscx-vpn --cuda 0 --variant no-pretrain
+python run_seeds.py --dataset iscx-vpn --cuda 0 --variant full-tuning
 ```
 
-Replace `iscx-vpn` with any CLI name in the dataset table. See [Reproducibility Notes](docs/REPRODUCIBILITY.md) for split procedures, the seed list, run outputs, optimizer settings, and implementation details. Multi-seed summaries contain validation results; evaluate the saved checkpoints separately for test-set reporting.
+CESNET requires the actual per-flow packet inputs and acquisition-week metadata. The subset builder records a deterministic 75-class recipe; it does not reconstruct an unavailable historical file list. It accepts already separated PCAP/PCAPNG or corresponding packet NPZ inputs, including UDP for QUIC. The legacy TCP converter is not used for this route.
+
+Ten-seed runs now save independent test metrics, predictions and sample IDs, and aggregate test means/sample standard deviations separately from validation summaries. `compare_runs.py` checks pairing and computes two-sided paired t-tests, 95% confidence intervals and Holm-adjusted p-values. `benchmark.py` measures synchronized forward-pass batch latency, actual samples/s, peak allocated/reserved CUDA memory, and parameter counts. Full GPU execution and historical result reproduction have not been verified in the editing environment; no scores are hard-coded.
+
+See [Reproducibility Notes](docs/REPRODUCIBILITY.md) and [Manuscript Alignment](docs/ALIGNMENT.md) for defaults, migration requirements and remaining response-letter corrections.
 
 ## Repository Structure
 
@@ -125,7 +133,10 @@ Replace `iscx-vpn` with any CLI name in the dataset table. See [Reproducibility 
 | `dataloader.py`, `utils.py` | Dataset loading, collation, and processing utilities |
 | `train.py`, `test.py` | Training and evaluation |
 | `training_settings.py` | Effective run metadata and learning-rate schedule |
-| `run_seeds.py` | Optional repeated runs with separate checkpoints and logs |
+| `run_seeds.py` | Repeated training plus independent test metrics and summaries |
+| `build_cesnet_subset.py`, `paired_data.py`, `packet_input.py` | Manifest selection, shared packet selection and packet input |
+| `evaluation.py`, `compare_runs.py` | Checkpoint evaluation and paired statistical comparisons |
+| `benchmark.py` | CUDA latency, throughput, memory and parameter measurements |
 | `DATA/` | Empty class categorization templates |
 | `docs/` | Dataset and reproducibility details |
 

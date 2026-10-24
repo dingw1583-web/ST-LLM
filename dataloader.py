@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 import dgl
 import torch
 from dgl.data import DGLDataset
@@ -22,6 +24,15 @@ class MixTrafficFlowDataset4DGL(DGLDataset):
         header_file = np.load(self.header_path, allow_pickle=True)
         self.header_data = header_file['data']
         self.header_labels = header_file['label']
+        if 'sample_ids' not in header_file:
+            raise ValueError("Missing sample identities; regenerate paired preprocessing artifacts")
+        self.sample_ids = header_file['sample_ids'].tolist()
+        self.group_ids = header_file['group_ids'].tolist()
+        if len(self.sample_ids) != len(self.header_data) or len(self.group_ids) != len(self.header_data):
+            raise ValueError('Identity count differs from data count')
+        graph_ids = json.loads(Path(self.payload_path + '.ids.json').read_text())
+        if self.sample_ids != graph_ids or len(set(self.sample_ids)) != len(self.sample_ids):
+            raise ValueError("Header/payload sample identity mismatch or duplicate sample IDs")
 
 
         self.labels = self.payload_labels["glabel"]

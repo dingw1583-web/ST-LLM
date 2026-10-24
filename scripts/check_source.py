@@ -22,6 +22,8 @@ for dataset, cls in config.DATASET_CONFIGS.items():
         assert Path(cls.DIR_PATH_DICT[label]).name == name
         prefix = dataset.replace('iscx', 'ISCX').replace('ustc-tfc2016', 'USTC-TFC2016')
         directory = root/'DATA'/Path(cls.TRAIN_DATA).parent.name
+        if dataset == 'cesnet-quic22':
+            continue
         expected = list(directory.glob('DATA_*_'+name+'.txt'))
         assert len(expected) == 1, (dataset, name)
 assert config.USTCTFC2016Config.NUM_CLASSES == 20
@@ -36,5 +38,6 @@ assert config.USTCTFC2016Config.SEED == 32
 train_source = (root/'train.py').read_text(encoding='utf-8')
 assert 'manual_seed(42)' not in train_source
 assert 'set_seed(42)' not in train_source
-assert train_source.count('manual_seed(args.seed)') == 2
+assert train_source.count('manual_seed(args.seed)') == 1
+assert 'grouped_split(full_ds.group_ids, args.seed)' in train_source
 print('Ten-seed configuration and training seed wiring passed.')

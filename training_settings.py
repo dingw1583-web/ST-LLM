@@ -30,5 +30,5 @@ def training_settings(config):
     )
     result = {name: getattr(config, name) for name in names}
     result.update({"optimizer": "Adam", "scheduler": "linear_warmup_cosine_decay",
-                   "model_version": "llm4etc_mlp_head_v1", "pooling": "temporal_mean"})
+                   "model_version": "llm4etc_paired_v2", "pooling": "temporal_mean"})
     return result

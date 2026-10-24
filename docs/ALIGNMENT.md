@@ -1,36 +1,23 @@
 # Alignment with the reviewer response
 
-## Model architecture
+The current source provides the main six-block model, HDF, No Pretrain and Full Tuning entry points, a manifest-driven CESNET 75-class temporal route, paired preprocessing, ten-seed test evaluation, paired t-tests with Holm correction, and CUDA deployment profiling. See [Experiment Guide](EXPERIMENTS.md) for exact commands and limitations.
 
-- Removed the extra two-layer bidirectional LSTM after GPT-2.
-- GPT-2 now returns packet representations of shape `[batch, packets, 768]`. Temporal mean pooling yields one 768-dimensional flow representation, followed by `Linear(768, 128)`, ReLU, dropout, and `Linear(128, classes)`.
-- Retained the header Bi-LSTM, one-layer mean-aggregator GraphSAGE with hidden dimension 128, and six retained GPT-2 blocks.
-- Cross-gated fusion outputs 256 dimensions; the separate projection produces the 768-dimensional GPT-2 input. These are distinct dimensions.
-- The `PFA` implementation is unchanged. Under U=1, the final retained block's attention and the LayerNorms are trainable, while FFNs are frozen. The response letter's page-15 statement about tuning the MLP is a text error; it must not be implemented in code.
-- Temporal mean pooling specifies how a packet sequence enters the two-layer classifier. The response does not independently specify the pooling operation; this is an explicit implementation choice for this aligned release.
+## Architecture and settings
 
-## Training settings
+The extra Bi-LSTM after GPT-2 has been removed; the header Bi-LSTM remains. The classifier takes temporal mean-pooled 768-dimensional GPT-2 features, then `Linear(768,128)`, ReLU, dropout and `Linear(128,classes)`. GraphSAGE is one layer with mean aggregation and hidden dimension 128. Fusion produces 256 dimensions before a separate 768-dimensional projection. HDF U=1 preserves final-block attention and LayerNorm tuning while FFNs remain frozen.
 
-The response supplies a shared settings table, not separate original training logs. The following per-dataset configuration matrix implements that table as reproducible defaults for new runs:
+The response letter's page-15 MLP wording must be changed to MHA. Its fusion dimension statements and Table 1 must distinguish fusion output 256 from GPT-2 input 768. Mean pooling and linear-warm-up/cosine scheduling are explicit implementation choices that should be described in the manuscript.
 
-| Dataset | Packets | Batch size | Epochs | Optimizer | Peak LR | Min LR | Warm-up | Dropout | Default seed |
-| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |
-| ISCX-VPN | 30 | 512 | 120 | Adam | 1e-2 | 1e-4 | 0.1 | 0.2 | 32 |
-| ISCX-NonVPN | 30 | 512 | 120 | Adam | 1e-2 | 1e-4 | 0.1 | 0.2 | 32 |
-| ISCX-Tor | 30 | 512 | 120 | Adam | 1e-2 | 1e-4 | 0.1 | 0.2 | 32 |
-| ISCX-NonTor | 30 | 512 | 120 | Adam | 1e-2 | 1e-4 | 0.1 | 0.2 | 32 |
-| USTC-TFC2016 | 30 | 512 | 120 | Adam | 1e-2 | 1e-4 | 0.1 | 0.2 | 32 |
+All routes inherit response-table defaults: 30 packets, 150 payload bytes, 40 header bytes, batch 512, 120 epochs, Adam, learning rate 1e-2 to 1e-4, warm-up 0.1, dropout 0.2, and the ten configured seeds. These are reproducible defaults, not proof of historical experimental settings. `PREVIOUS_SETTINGS.json` preserves the earlier configuration snapshot, not an experimental record.
 
-Shared values are intentionally identified as reported defaults. They are not evidence that the original experiments used identical settings. Dataset-specific values can be supplied in their configuration classes when validated logs become available. The previous configuration matrix and actual trainer overrides are preserved in `PREVIOUS_SETTINGS.json`; that snapshot also is not an experimental record.
+## Changes requiring updated manuscript wording
 
-Adam, loss smoothing, weight decay, learning-rate bounds, warm-up ratio, batch size, epochs, and model dropout now read the effective configuration. Linear warm-up followed by cosine decay is the documented scheduler choice because the response gives only a range and warm-up ratio. Weight decay and label smoothing default to zero; neither is specified in the response table. A run prints and saves its effective settings in `model.run.json` (or the selected checkpoint stem's `.run.json`).
+Files are sorted and modalities now share packet selection and sample IDs. Training/validation splitting is source-group-aware to prevent segments of one source crossing the boundary, targeting a 50/50 sample ratio. With multiple segments per source this is approximately equal rather than exactly equal. Tor now includes the last 60-second window. Positive-PMI graphs retain isolated byte nodes including padding. These corrections require regenerated data and fresh experiments; do not describe them as preserving historical results.
 
-## Splits and seeds
+CESNET uses explicit Week-1 training, Week-2 validation and Week-3/4 tests. The original 126,029-flow subset list is unavailable, so the new deterministic subset builder does not claim to reconstruct it. Temporal class selection and source week metadata must be documented with the actual manifest.
 
-The per-class preprocessing test split and the seeded 50/50 train/validation split are unchanged. All configurations use the ten seeds 32, 42, 52, 62, 72, 82, 92, 102, 112, and 122. Preprocessing continues to follow filesystem order. The loader rejects incompatible packet counts and mismatched label sequences; matching counts and labels alone do not prove original flow identity.
+## Evidence limits
 
-## Migration and evidence limits
+No trained checkpoints or fabricated results are included. New source entry points do not validate the reported accuracy, 548-second training time, 603.9-MiB memory, 17.2-ms latency or 2560.5-samples/s throughput. Measure the revised model and all comparators under the documented protocol before updating result tables. Baseline statistics require genuine paired per-seed results; the utility never invents these inputs.
 
-Regenerate both header and payload artifacts with the 30-packet configuration, then retrain the new classifier. Checkpoints containing the old post-GPT-2 `rnn.*` parameters do not match the revised head. Do not silently discard those parameters or load them with `strict=False` to claim compatibility.
-
-No new training results are supplied. The architecture change can affect accuracy, parameters, FLOPs, memory, latency, and throughput; all such reported values require measurement with this model. Local checks cover Python parsing, configuration/routing, schedule boundaries and edge cases, and unchanged HDF source structure. Full model execution requires compatible PyTorch, DGL, Transformers, GPT-2 weights, and datasets.
+Full Layer, FPT, feature-removal ablations and external baseline training are not implemented by the three provided variant switches. Do not claim every experimental figure can be reproduced solely from this release. Local checks cover source/configuration and synthetic correctness; GPU training/profiling remain to be run with the required environment and data.

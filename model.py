@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from dgl.nn.pytorch.conv import SAGEConv
 from transformers.models.gpt2.modeling_gpt2 import GPT2Model
+from transformers import GPT2Config
 from config import Config
 
 config = Config()
@@ -57,7 +58,7 @@ class PFA(nn.Module):
     def __init__(self,
                  gpt_layers: int = 6,
                  n_freeze:   int = 4,
-                 U:          int = 1):
+                 U:          int = 1, variant: str = "hdf"):
         super().__init__()
         assert 0 <= n_freeze <= gpt_layers, \
             "`n_freeze` must be between 0 and `gpt_layers`"
@@ -66,11 +67,14 @@ class PFA(nn.Module):
         self.gpt_layers = gpt_layers
 
 
-        self.gpt2 = GPT2Model.from_pretrained(
-            "gpt2",
-            output_attentions=True,
-            output_hidden_states=True,
-        )
+        if variant not in ("hdf", "no-pretrain", "full-tuning"):
+            raise ValueError("Unknown variant: " + variant)
+        if variant == "no-pretrain":
+            self.gpt2 = GPT2Model(GPT2Config(n_layer=gpt_layers))
+        else:
+            self.gpt2 = GPT2Model.from_pretrained(
+                "gpt2", output_attentions=False, output_hidden_states=False)
+
 
 
         self.gpt2.h = self.gpt2.h[:gpt_layers]
@@ -94,8 +98,12 @@ class PFA(nn.Module):
                         param.requires_grad = True
 
 
-        self.gpt2.wte.requires_grad_(False)
-        self.gpt2.wpe.requires_grad_(False)
+        if variant in ("no-pretrain", "full-tuning"):
+            self.gpt2.requires_grad_(True)
+
+        if variant == "hdf":
+            self.gpt2.wte.requires_grad_(False)
+            self.gpt2.wpe.requires_grad_(False)
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -104,11 +112,11 @@ class PFA(nn.Module):
 
 
 class ST_LLM(nn.Module):
-    def __init__(self, in_dim: int = 256, gpt_layers: int = 6, hdf_u: int = 1):
+    def __init__(self, in_dim: int = 256, gpt_layers: int = 6, hdf_u: int = 1, variant: str = "hdf"):
         super().__init__()
         self.conv = nn.Conv2d(in_dim, 256, kernel_size=1)
         self.proj = nn.Linear(256, 768)
-        self.gpt = PFA(gpt_layers=gpt_layers, U=hdf_u)
+        self.gpt = PFA(gpt_layers=gpt_layers, U=hdf_u, variant=variant)
 
     def forward(self, x):
         x = self.conv(x.permute(0, 2, 1).unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
@@ -118,13 +126,13 @@ class ST_LLM(nn.Module):
 
 class MixTemporalGNN(nn.Module):
 
-    def __init__(self, num_classes: int, embedding_size: int = 64, h_feats: int = 128, dropout: float = 0.2, classifier_dropout: float = 0.2, gpt_layers: int = 6, hdf_u: int = 1):
+    def __init__(self, num_classes: int, embedding_size: int = 64, h_feats: int = 128, dropout: float = 0.2, classifier_dropout: float = 0.2, gpt_layers: int = 6, hdf_u: int = 1, variant: str = "hdf"):
         super().__init__()
         self.header_enc = BiLSTMHeaderEncoder(emb=embedding_size, hid=64, dropout=dropout)
         self.payload_gcn = GCN(embedding_size, h_feats, dropout)
 
         self.fuse = CrossGatedFilter(dim=h_feats)
-        self.st_llm = ST_LLM(in_dim=2 * h_feats, gpt_layers=gpt_layers, hdf_u=hdf_u)
+        self.st_llm = ST_LLM(in_dim=2 * h_feats, gpt_layers=gpt_layers, hdf_u=hdf_u, variant=variant)
 
         self.cls = nn.Sequential(
             nn.Linear(768, h_feats), nn.ReLU(), nn.Dropout(classifier_dropout),

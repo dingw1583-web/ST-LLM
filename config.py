@@ -138,12 +138,19 @@ USTC_TFC2016_CLASSES = (
 )
 
 
+class CESNETQUIC22Config(Config):
+    NUM_CLASSES = 75
+    NUM_WORKERS = 0
+    MAX_SEG_PER_CLASS = 9999
+
+
 DATASET_CONFIGS = {
     "iscx-vpn": ISCXVPNConfig,
     "iscx-nonvpn": ISCXNonVPNConfig,
     "iscx-tor": ISCXTorConfig,
     "iscx-nontor": ISCXNonTorConfig,
     "ustc-tfc2016": USTCTFC2016Config,
+    "cesnet-quic22": CESNETQUIC22Config,
 }
 
 
@@ -169,7 +176,16 @@ _configure_paths(ISCXNonTorConfig, "ISCX-NonTor", ("Audio", "Browsing", "Chat", 
 _configure_paths(USTCTFC2016Config, "USTC-TFC2016", USTC_TFC2016_CLASSES)
 
 
+_configure_paths(DATASET_CONFIGS["cesnet-quic22"], "CESNET-QUIC22", tuple(str(i) for i in range(75)))
+
+
 def get_config(dataset):
     if dataset not in DATASET_CONFIGS:
         raise ValueError("Unknown dataset: " + dataset)
-    return DATASET_CONFIGS[dataset]()
+    cfg = DATASET_CONFIGS[dataset]()
+    if dataset == "cesnet-quic22":
+        base = DATA_ROOT / "CESNET-QUIC22"
+        for split, prefix in (("week1", "TRAIN"), ("week2", "VAL"), ("week3", "TEST"), ("week4", "WEEK4")):
+            setattr(cfg, prefix + "_GRAPH_DATA", str(base / (split + ".bin")))
+            setattr(cfg, "HEADER_" + prefix + "_DATA", str(base / (split + ".npz")))
+    return cfg

@@ -1,17 +1,18 @@
-import os, sys, argparse, contextlib, json
+import os, sys, argparse, contextlib, json, time
 from pathlib import Path
 
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 import torch
 import torch.nn as nn
-from torch.utils.data import random_split
+from torch.utils.data import random_split, Subset
 from dgl.dataloading import GraphDataLoader
 from sklearn.metrics import classification_report, confusion_matrix
 import numpy as np
 
 from dataloader import MixTrafficFlowDataset4DGL
 from model import MixTemporalGNN
+from paired_data import grouped_split
 from training_settings import learning_rate_factor, training_settings
 from utils import show_time, set_seed, get_device, mix_collate_fn
 from config import *
@@ -71,7 +72,10 @@ def _build_subset_ds(ds, only_label=None):
     if only_label is None:
         return ds
     idx = [i for i in range(len(ds)) if ds[i][2] == only_label]
-    return torch.utils.data.Subset(ds, idx)
+    subset = torch.utils.data.Subset(ds, idx)
+    subset.sample_ids = [ds.sample_ids[i] for i in idx]
+    subset.group_ids = [ds.group_ids[i] for i in idx]
+    return subset
 
 def _assert_test_not_in_train(cfg, args):
 
@@ -105,8 +109,17 @@ def train(config, device, args):
     n = len(full_ds)
     train_len = int(0.5 * n)
     val_len = n - train_len
-    train_ds, val_ds = random_split(full_ds, [train_len, val_len],
-                                    generator=torch.Generator().manual_seed(args.seed))
+    if args.dataset == "cesnet-quic22":
+        if args.only_label is not None:
+            raise ValueError("only_label is unsupported for temporal experiments")
+        train_ds = Subset(full_ds, list(range(n)))
+        val_ds = MixTrafficFlowDataset4DGL(header_path=config.HEADER_VAL_DATA, payload_path=config.VAL_GRAPH_DATA)
+        if val_ds.flow_length != config.FLOW_PAD_TRUNC_LENGTH:
+            raise ValueError("Prepared validation packet count differs from the configuration")
+    else:
+        train_indices, val_indices = grouped_split(full_ds.group_ids, args.seed)
+        train_ds, val_ds = Subset(full_ds, train_indices), Subset(full_ds, val_indices)
+
 
     g = torch.Generator().manual_seed(args.seed)
     train_loader = GraphDataLoader(train_ds, batch_size=config.BATCH_SIZE,
@@ -122,7 +135,7 @@ def train(config, device, args):
                            h_feats=config.H_FEATS,
                            dropout=config.DROPOUT,
                            classifier_dropout=config.CLASSIFIER_DROPOUT,
-                           gpt_layers=config.GPT_LAYERS, hdf_u=config.HDF_U).to(device)
+                           gpt_layers=config.GPT_LAYERS, hdf_u=config.HDF_U, variant=args.variant).to(device)
 
     criterion = nn.CrossEntropyLoss(label_smoothing=config.LABEL_SMOOTHING)
     optimizer = torch.optim.Adam(
@@ -133,11 +146,13 @@ def train(config, device, args):
         optimizer, lr_lambda=lambda step: learning_rate_factor(
             step, steps, config.LR, config.LR_MIN, config.WARM_UP))
     settings = training_settings(config)
+    settings["variant"] = args.variant
     print("Effective training settings:", json.dumps(settings, sort_keys=True))
 
     best_val_acc, best_state = -1.0, None
 
 
+    training_started = time.perf_counter()
     for epoch in range(1, config.MAX_EPOCH + 1):
         model.train(); epoch_loss = correct = total = 0
         for hdr, pay, labels in train_loader:
@@ -170,10 +185,16 @@ def train(config, device, args):
     torch.save(best_state, save_path)
     save_path.with_suffix(".run.json").write_text(json.dumps({
         "dataset": args.dataset, "seed": args.seed,
+        "training_loop_seconds": time.perf_counter() - training_started,
+        "training_time_scope": "Training and validation loop including logging; excludes preprocessing and model loading",
         "settings": settings,
         "best_validation_accuracy": best_val_acc,
         "checkpoint": str(save_path), "train_indices": train_ds.indices,
-        "validation_indices": val_ds.indices,
+        "validation_indices": val_ds.indices if hasattr(val_ds, "indices") else list(range(len(val_ds))),
+        "train_sample_ids": [full_ds.sample_ids[i] for i in train_ds.indices],
+        "train_group_ids": [full_ds.group_ids[i] for i in train_ds.indices],
+        "validation_group_ids": ([full_ds.group_ids[i] for i in val_ds.indices] if hasattr(val_ds, "indices") else val_ds.group_ids),
+        "validation_sample_ids": ([full_ds.sample_ids[i] for i in val_ds.indices] if hasattr(val_ds, "indices") else val_ds.sample_ids),
         "scope": "Validation accuracy; not test accuracy. Indices refer to the selected dataset."
     }, indent=2), encoding="utf-8")
     print("✅ Best model saved to", save_path)
@@ -200,7 +221,8 @@ def train(config, device, args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True,
-                        choices=["iscx-vpn", "iscx-nonvpn", "iscx-tor", "iscx-nontor", "ustc-tfc2016"])
+                        choices=tuple(DATASET_CONFIGS))
+    parser.add_argument("--variant", choices=("hdf", "no-pretrain", "full-tuning"), default="hdf")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--cuda", required=True, help="GPU index, e.g. 0")
     parser.add_argument("--num_workers", type=int, default=-1)
