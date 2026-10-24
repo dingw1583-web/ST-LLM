@@ -1,12 +1,16 @@
 # Release Notes
 
+## Reviewer-response alignment
+
+Removed the post-GPT-2 Bi-LSTM, added temporal mean pooling and a direct two-layer classifier, and wired training to the response-table configuration. The HDF implementation is unchanged. Previous configurations are retained as a source snapshot, and current settings are recorded per run. Regenerate data and retrain; this release does not validate historical performance. See [Alignment Details](ALIGNMENT.md).
+
 ## English documentation update
 
 - Translated Chinese runtime messages, exceptions, and command-line help into English in `train.py`, `model.py`, and `dataloader.py`.
 - Reorganized the README around the model, environment, data preparation, training, and evaluation.
 - Documented ISCX-VPN, ISCX-NonVPN, ISCX-Tor, ISCX-NonTor, and USTC-TFC2016 with equal coverage and commands for every configuration.
 - Moved detailed class mappings and repeated-run procedures to `DATASETS.md` and `REPRODUCIBILITY.md`.
-- Preserved the existing model computations, dataset settings, seeds, training logic, license, and categorization templates.
+- At that documentation-only stage, model computations and training settings were unchanged. The later alignment changes are described above.
 
 ## Included functionality
 
