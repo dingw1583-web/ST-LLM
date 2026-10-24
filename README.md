@@ -6,6 +6,8 @@ ST-LLM combines packet-header sequences and byte-level payload graphs through cr
 
 ![ST-LLM architecture](figures/ST-LLM.png)
 
+The implemented path is header Bi-LSTM and payload GraphSAGE → cross-gated fusion → 256-to-768 projection → six GPT-2 blocks → temporal mean pooling → two fully connected layers. HDF retains the existing final-block attention and LayerNorm tuning rule; FFNs remain frozen.
+
 ## Environment Setup
 
 Create a Python environment, install PyTorch and DGL builds compatible with your CUDA version, and install the remaining dependencies:
@@ -104,7 +106,7 @@ For a custom checkpoint, add `--checkpoint /path/to/model.pth`. Evaluation repor
 
 ## Reproducibility
 
-Dataset configurations and single-run defaults are defined in `config.py`. Optional multi-seed runs are available for every supported dataset through `run_seeds.py`:
+Dataset configurations and single-run defaults are defined in `config.py`. The current defaults follow the shared response-table settings: 30 packets, batch size 512, 120 epochs, Adam, learning rate `1e-2` to `1e-4`, warm-up ratio 0.1, and dropout 0.2. The training script reads these settings rather than overriding them. See [Manuscript Alignment](docs/ALIGNMENT.md) for provenance and checkpoint compatibility; these are defaults for aligned reruns, not a reconstruction of unpublished per-dataset training logs. Optional multi-seed runs are available for every supported dataset through `run_seeds.py`:
 
 ```bash
 python run_seeds.py --dataset iscx-vpn --cuda 0 --dry-run
@@ -122,6 +124,7 @@ Replace `iscx-vpn` with any CLI name in the dataset table. See [Reproducibility 
 | `pcap2npy.py`, `preprocess.py` | Packet extraction and traffic graph construction |
 | `dataloader.py`, `utils.py` | Dataset loading, collation, and processing utilities |
 | `train.py`, `test.py` | Training and evaluation |
+| `training_settings.py` | Effective run metadata and learning-rate schedule |
 | `run_seeds.py` | Optional repeated runs with separate checkpoints and logs |
 | `DATA/` | Empty class categorization templates |
 | `docs/` | Dataset and reproducibility details |

@@ -104,11 +104,11 @@ class PFA(nn.Module):
 
 
 class ST_LLM(nn.Module):
-    def __init__(self, in_dim: int = 256):
+    def __init__(self, in_dim: int = 256, gpt_layers: int = 6, hdf_u: int = 1):
         super().__init__()
         self.conv = nn.Conv2d(in_dim, 256, kernel_size=1)
         self.proj = nn.Linear(256, 768)
-        self.gpt = PFA()
+        self.gpt = PFA(gpt_layers=gpt_layers, U=hdf_u)
 
     def forward(self, x):
         x = self.conv(x.permute(0, 2, 1).unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
@@ -118,17 +118,16 @@ class ST_LLM(nn.Module):
 
 class MixTemporalGNN(nn.Module):
 
-    def __init__(self, num_classes: int, embedding_size: int = 64, h_feats: int = 128, dropout: float = 0.2, downstream_dropout: float = 0.0):
+    def __init__(self, num_classes: int, embedding_size: int = 64, h_feats: int = 128, dropout: float = 0.2, classifier_dropout: float = 0.2, gpt_layers: int = 6, hdf_u: int = 1):
         super().__init__()
         self.header_enc = BiLSTMHeaderEncoder(emb=embedding_size, hid=64, dropout=dropout)
         self.payload_gcn = GCN(embedding_size, h_feats, dropout)
 
         self.fuse = CrossGatedFilter(dim=h_feats)
-        self.st_llm = ST_LLM(in_dim=2 * h_feats)
+        self.st_llm = ST_LLM(in_dim=2 * h_feats, gpt_layers=gpt_layers, hdf_u=hdf_u)
 
-        self.rnn = nn.LSTM(768, h_feats, num_layers=2, bidirectional=True, dropout=downstream_dropout)
         self.cls = nn.Sequential(
-            nn.Linear(2 * h_feats, h_feats), nn.ReLU(), nn.Dropout(0.3),
+            nn.Linear(768, h_feats), nn.ReLU(), nn.Dropout(classifier_dropout),
             nn.Linear(h_feats, num_classes)
         )
 
@@ -138,9 +137,7 @@ class MixTemporalGNN(nn.Module):
         h_pay = self.payload_gcn(g, g.ndata['feat']).view(B, -1, 128)
         h = self.fuse(h_hdr, h_pay)
         h = self.st_llm(h)
-        h = h.transpose(0, 1)
-        _, (h_n, _) = self.rnn(h)
-        feat = torch.cat([h_n[-1], h_n[-2]], dim=1)
+        feat = h.mean(dim=1)
         return self.cls(feat)
 
 

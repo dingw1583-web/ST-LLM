@@ -12,7 +12,7 @@ import numpy as np
 
 from dataloader import MixTrafficFlowDataset4DGL
 from model import MixTemporalGNN
-from optim import GradualWarmupScheduler
+from training_settings import learning_rate_factor, training_settings
 from utils import show_time, set_seed, get_device, mix_collate_fn
 from config import *
 
@@ -93,7 +93,11 @@ def train(config, device, args):
                                         payload_path=config.TRAIN_GRAPH_DATA)
 
 
+    if full_ds.header_data.shape[1] != config.FLOW_PAD_TRUNC_LENGTH:
+        raise ValueError("Prepared packet count does not match the configuration; rerun preprocessing")
     full_ds = _build_subset_ds(full_ds, args.only_label)
+    if len(full_ds) < 2:
+        raise ValueError("At least two prepared samples are required for the train/validation split")
     if args.only_label is not None:
         print(f"📌 Training on label {args.only_label}, sample count {len(full_ds)}")
 
@@ -117,12 +121,19 @@ def train(config, device, args):
                            embedding_size=config.EMBEDDING_SIZE,
                            h_feats=config.H_FEATS,
                            dropout=config.DROPOUT,
-                           downstream_dropout=config.DOWNSTREAM_DROPOUT).to(device)
+                           classifier_dropout=config.CLASSIFIER_DROPOUT,
+                           gpt_layers=config.GPT_LAYERS, hdf_u=config.HDF_U).to(device)
 
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)
+    criterion = nn.CrossEntropyLoss(label_smoothing=config.LABEL_SMOOTHING)
+    optimizer = torch.optim.Adam(
+        (parameter for parameter in model.parameters() if parameter.requires_grad),
+        lr=config.LR, weight_decay=config.WEIGHT_DECAY)
     steps = len(train_loader) * config.MAX_EPOCH
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=3e-4, total_steps=steps)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer, lr_lambda=lambda step: learning_rate_factor(
+            step, steps, config.LR, config.LR_MIN, config.WARM_UP))
+    settings = training_settings(config)
+    print("Effective training settings:", json.dumps(settings, sort_keys=True))
 
     best_val_acc, best_state = -1.0, None
 
@@ -159,6 +170,7 @@ def train(config, device, args):
     torch.save(best_state, save_path)
     save_path.with_suffix(".run.json").write_text(json.dumps({
         "dataset": args.dataset, "seed": args.seed,
+        "settings": settings,
         "best_validation_accuracy": best_val_acc,
         "checkpoint": str(save_path), "train_indices": train_ds.indices,
         "validation_indices": val_ds.indices,
