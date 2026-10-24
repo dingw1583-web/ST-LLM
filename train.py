@@ -83,7 +83,7 @@ def _assert_test_not_in_train(cfg, args):
                  Path(args.test_graph).resolve()}
     inter = train_set & test_set
     if inter:
-        raise ValueError(f"🚨 测试集文件与训练集重复: {list(inter)}")
+        raise ValueError(f"🚨 Test files overlap with training files: {list(inter)}")
 
 def train(config, device, args):
     _assert_test_not_in_train(config, args)
@@ -95,7 +95,7 @@ def train(config, device, args):
 
     full_ds = _build_subset_ds(full_ds, args.only_label)
     if args.only_label is not None:
-        print(f"📌 模拟事故现场：仅使用标签 {args.only_label}，样本数 {len(full_ds)}")
+        print(f"📌 Training on label {args.only_label}, sample count {len(full_ds)}")
 
 
     n = len(full_ds)
@@ -170,11 +170,11 @@ def train(config, device, args):
     if args.test_header and args.test_graph:
         test_path_h, test_path_g = Path(args.test_header), Path(args.test_graph)
         if not test_path_h.exists() or not test_path_g.exists():
-            print("⚠️  测试集路径不存在，跳过测试阶段"); return
+            print("⚠️  Test paths do not exist; skipping test evaluation"); return
         try:
             test_ds = MixTrafficFlowDataset4DGL(header_path=str(test_path_h), payload_path=str(test_path_g))
         except Exception as e:
-            print("⚠️  加载测试集失败：", e); return
+            print("⚠️  Failed to load the test dataset:", e); return
         test_loader = GraphDataLoader(test_ds, batch_size=config.BATCH_SIZE,
                                       shuffle=False, collate_fn=mix_collate_fn,
                                       num_workers=config.NUM_WORKERS, generator=g)
@@ -192,10 +192,10 @@ if __name__ == '__main__':
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--cuda", required=True, help="GPU index, e.g. 0")
     parser.add_argument("--num_workers", type=int, default=-1)
-    parser.add_argument("--save_path", type=str, default="", help="自定义模型保存路径")
-    parser.add_argument("--only_label", type=int, default=None, help="仅保留该类数据进行训练")
-    parser.add_argument("--test_header", type=str, default="", help="测试集 header 文件路径")
-    parser.add_argument("--test_graph", type=str, default="", help="测试集 graph 文件路径")
+    parser.add_argument("--save_path", type=str, default="", help="Custom checkpoint output path")
+    parser.add_argument("--only_label", type=int, default=None, help="Train using samples from this class only")
+    parser.add_argument("--test_header", type=str, default="", help="Path to the test header array")
+    parser.add_argument("--test_graph", type=str, default="", help="Path to the test payload graph")
     args = parser.parse_args()
 
 

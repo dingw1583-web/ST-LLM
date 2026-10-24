@@ -31,12 +31,12 @@ class MixTrafficFlowDataset4DGL(DGLDataset):
 
 
         factor = len(self.payload_data) // len(self.header_data)
-        print(f"复制因子: payload({len(self.payload_data)})/header({len(self.header_data)}) = {factor}")
+        print(f"Replication factor: payload({len(self.payload_data)})/header({len(self.header_data)}) = {factor}")
 
 
         if len(self.payload_data) % len(self.header_data) != 0:
             raise ValueError(
-                f"Payload数量({len(self.payload_labels)})不是header数量({len(self.header_labels)})的整数倍"
+                f"Payload count ({len(self.payload_labels)}) is not an integer multiple of the header count ({len(self.header_labels)})"
             )
 
 
