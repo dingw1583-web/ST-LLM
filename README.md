@@ -1,4 +1,4 @@
-# ST-LLM: Spatial-Temporal Feature Fusion for Encrypted Traffic Classification
+# LLM4ETC: Classifying encrypted traffic via spatial-temporal feature fusion in large language models
 
 PyTorch implementation of **LLM4ETC: Classifying encrypted traffic via spatial-temporal feature fusion in large language models**.
 
