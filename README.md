@@ -2,7 +2,7 @@
 
 PyTorch implementation of **LLM4ETC: Classifying encrypted traffic via spatial-temporal feature fusion in large language models**.
 
-ST-LLM combines packet-header sequences and byte-level payload graphs through cross-gated fusion, then adapts a pretrained GPT-2 backbone to learn global spatial-temporal traffic representations.
+LLM4ETC combines packet-header sequences and byte-level payload graphs through cross-gated fusion, then adapts a pretrained GPT-2 backbone to learn global spatial-temporal traffic representations.
 
 ![ST-LLM architecture](figures/ST-LLM.png)
 
