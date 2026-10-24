@@ -36,11 +36,13 @@ The implementation provides configurations for the following datasets and traffi
 
 Obtain the datasets separately. Class names, label mappings, and directory examples for **the five original configurations** are listed in [Dataset Preparation](docs/DATASETS.md). The `DATA/` directory contains empty categorization templates; packet captures and trained checkpoints are not included.
 
+CESNET uses Week 1 for training, Week 2 for validation and Weeks 3–4 for separate tests.
+
 ## Pre-processing
 
 ### 1. Prepare bidirectional flows
 
-Split captures into bidirectional TCP flows using a flow-splitting tool such as SplitCap. Place each per-flow `.pcap` in the class directory defined by `DIR_PATH_DICT` in `config.py`. The converter extracts packet data; it does not split captures into flows. `pcapng2pcap.py` is an optional format-conversion utility.
+Split captures into bidirectional flows using a flow-splitting tool such as SplitCap. For ISCX and USTC, place each per-flow `.pcap` in the class directory defined by `DIR_PATH_DICT` in `config.py`. The converter extracts packet data; it does not split captures into flows. `pcapng2pcap.py` is an optional format-conversion utility.
 
 Paths default to the repository's `data/` and `checkpoints/` directories. To use different locations:
 
@@ -63,6 +65,14 @@ python pcap2npy.py --dataset ustc-tfc2016
 
 Each command extracts header and payload sequences into per-flow `.npz` files. Existing files with the same filename stem are skipped.
 
+For CESNET, prepare a CSV with `path,label,week,flow_id`, where each path identifies a per-flow PCAP, PCAPNG or packet NPZ file. Week values are 1–4 and flow IDs must be unique. Create `cesnet.csv` from the candidate list and class labels:
+
+```bash
+python build_cesnet.py --input candidates.csv --classes classes.txt --output cesnet.csv
+```
+
+`classes.txt` lists one class label per line. CESNET packet extraction is performed during the preprocessing command below.
+
 ### 3. Construct traffic graphs
 
 Use the same dataset name for preprocessing:
@@ -73,6 +83,7 @@ python preprocess.py --dataset iscx-nonvpn
 python preprocess.py --dataset iscx-tor
 python preprocess.py --dataset iscx-nontor
 python preprocess.py --dataset ustc-tfc2016
+python preprocess.py --dataset cesnet-quic22 --manifest cesnet.csv
 ```
 
 The script creates paired header arrays, payload PMI graphs, identities and a split manifest. LLM4ETC consumes header arrays and payload graphs; headers and payloads use identical retained packet indices.
@@ -87,6 +98,7 @@ python train.py --dataset iscx-nonvpn --cuda 0
 python train.py --dataset iscx-tor --cuda 0
 python train.py --dataset iscx-nontor --cuda 0
 python train.py --dataset ustc-tfc2016 --cuda 0
+python train.py --dataset cesnet-quic22 --cuda 0
 ```
 
 Each command is an independent experiment. Choose the relevant command rather than running every dataset. Add `--seed 32` to select a run seed or `--save_path checkpoints/custom.pth` to choose a checkpoint path.
@@ -101,25 +113,11 @@ python test.py --dataset iscx-nonvpn --cuda 0
 python test.py --dataset iscx-tor --cuda 0
 python test.py --dataset iscx-nontor --cuda 0
 python test.py --dataset ustc-tfc2016 --cuda 0
+python test.py --dataset cesnet-quic22 --cuda 0 --split week3
+python test.py --dataset cesnet-quic22 --cuda 0 --split week4
 ```
 
-For a custom checkpoint, add `--checkpoint /path/to/model.pth`. Evaluation reports per-class precision, recall, and F1.
-
-## Reproducibility and reviewer experiments
-
-See the [Experiment Guide](docs/EXPERIMENTS.md) for complete commands and input schemas. New data must be regenerated with paired packet selection and sample/source IDs; old untracked caches are rejected. Existing datasets retain the per-class test rule; training/validation now uses source groups targeting half the samples to prevent related-flow leakage. CESNET uses Week 1 for training, Week 2 for validation and Weeks 3–4 for separate tests.
-
-```bash
-python build_cesnet.py --input candidates.csv --classes classes.txt --output cesnet.csv
-python preprocess.py --dataset cesnet-quic22 --manifest cesnet.csv
-python run_seeds.py --dataset iscx-vpn --cuda 0 --variant hdf
-python run_seeds.py --dataset iscx-vpn --cuda 0 --variant no-pretrain
-python run_seeds.py --dataset iscx-vpn --cuda 0 --variant full-tuning
-```
-
-Ten-seed runs now save independent test metrics, predictions and sample IDs, and aggregate test means/sample standard deviations separately from validation summaries. `compare_runs.py` checks pairing and computes two-sided paired t-tests, 95% confidence intervals and Holm-adjusted p-values. `benchmark.py` measures synchronized forward-pass batch latency, actual samples/s, peak allocated/reserved CUDA memory, and parameter counts. Full GPU execution and historical result reproduction have not been verified in the editing environment; no scores are hard-coded.
-
-See [Reproducibility Notes](docs/REPRODUCIBILITY.md) and [Manuscript Alignment](docs/ALIGNMENT.md) for defaults, migration requirements and remaining response-letter corrections.
+For a custom checkpoint, add `--checkpoint /path/to/model.pth` and use the matching `--seed`. Evaluation saves accuracy, macro and weighted precision, recall, and F1. For CESNET validation evaluation, use `--split week2`.
 
 ## Repository Structure
 
