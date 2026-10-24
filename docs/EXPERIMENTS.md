@@ -31,8 +31,8 @@ flows/example_w2.npz,application_a,2,original_flow_002
 The example only illustrates the schema; it is not a usable 75-class dataset. Build the subset using exactly 75 Week-1 classes. `classes.txt` lists one actual class label per line. An optional cap selects deterministically by the hash of seed and flow ID, separately for each class/week; omit the cap to retain all candidates. The builder requires each selected class in every week and records its recipe and input checksum.
 
 ```bash
-python build_cesnet_subset.py --input candidates.csv --classes classes.txt --seed 32 --output cesnet_subset.csv
-python preprocess.py --dataset cesnet-quic22 --manifest cesnet_subset.csv
+python build_cesnet.py --input candidates.csv --classes classes.txt --seed 32 --output cesnet.csv
+python preprocess.py --dataset cesnet-quic22 --manifest cesnet.csv
 python run_seeds.py --dataset cesnet-quic22 --cuda 0 --variant hdf
 ```
 

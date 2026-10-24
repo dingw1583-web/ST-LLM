@@ -32,7 +32,7 @@ The implementation provides configurations for the following datasets and traffi
 | ISCX-Tor2016: Tor | `iscx-tor` | 8 | `data/ISCX-Tor/` |
 | ISCX-Tor2016: NonTor | `iscx-nontor` | 8 | `data/ISCX-NonTor/` |
 | USTC-TFC2016 | `ustc-tfc2016` | 20 | `data/USTC-TFC2016/` |
-| CESNET-QUIC22 custom subset | `cesnet-quic22` | 75 | `data/CESNET-QUIC22/` |
+| CESNET-QUIC22 | `cesnet-quic22` | 75 | `data/CESNET-QUIC22/` |
 
 Obtain the datasets separately. Class names, label mappings, and directory examples for **the five original configurations** are listed in [Dataset Preparation](docs/DATASETS.md). The `DATA/` directory contains empty categorization templates; packet captures and trained checkpoints are not included.
 
@@ -110,14 +110,12 @@ For a custom checkpoint, add `--checkpoint /path/to/model.pth`. Evaluation repor
 See the [Experiment Guide](docs/EXPERIMENTS.md) for complete commands and input schemas. New data must be regenerated with paired packet selection and sample/source IDs; old untracked caches are rejected. Existing datasets retain the per-class test rule; training/validation now uses source groups targeting half the samples to prevent related-flow leakage. CESNET uses Week 1 for training, Week 2 for validation and Weeks 3–4 for separate tests.
 
 ```bash
-python build_cesnet_subset.py --input candidates.csv --classes classes.txt --output cesnet_subset.csv
-python preprocess.py --dataset cesnet-quic22 --manifest cesnet_subset.csv
+python build_cesnet.py --input candidates.csv --classes classes.txt --output cesnet.csv
+python preprocess.py --dataset cesnet-quic22 --manifest cesnet.csv
 python run_seeds.py --dataset iscx-vpn --cuda 0 --variant hdf
 python run_seeds.py --dataset iscx-vpn --cuda 0 --variant no-pretrain
 python run_seeds.py --dataset iscx-vpn --cuda 0 --variant full-tuning
 ```
-
-CESNET requires the actual per-flow packet inputs and acquisition-week metadata. The subset builder records a deterministic 75-class recipe; it does not reconstruct an unavailable historical file list. It accepts already separated PCAP/PCAPNG or corresponding packet NPZ inputs, including UDP for QUIC. The legacy TCP converter is not used for this route.
 
 Ten-seed runs now save independent test metrics, predictions and sample IDs, and aggregate test means/sample standard deviations separately from validation summaries. `compare_runs.py` checks pairing and computes two-sided paired t-tests, 95% confidence intervals and Holm-adjusted p-values. `benchmark.py` measures synchronized forward-pass batch latency, actual samples/s, peak allocated/reserved CUDA memory, and parameter counts. Full GPU execution and historical result reproduction have not been verified in the editing environment; no scores are hard-coded.
 
@@ -134,7 +132,7 @@ See [Reproducibility Notes](docs/REPRODUCIBILITY.md) and [Manuscript Alignment](
 | `train.py`, `test.py` | Training and evaluation |
 | `training_settings.py` | Effective run metadata and learning-rate schedule |
 | `run_seeds.py` | Repeated training plus independent test metrics and summaries |
-| `build_cesnet_subset.py`, `paired_data.py`, `packet_input.py` | Manifest selection, shared packet selection and packet input |
+| `build_cesnet.py`, `paired_data.py`, `packet_input.py` | Manifest selection, shared packet selection and packet input |
 | `evaluation.py`, `compare_runs.py` | Checkpoint evaluation and paired statistical comparisons |
 | `benchmark.py` | CUDA latency, throughput, memory and parameter measurements |
 | `DATA/` | Empty class categorization templates |
